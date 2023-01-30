@@ -1,0 +1,8 @@
+*.sbr
+*.obj
+*.pch
+*.pdb
+*.exe
+*.net
+*.rpt
+
