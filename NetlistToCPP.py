@@ -8,6 +8,23 @@ class ICList:
 		self.name = ""
 		self.type = "C"
 		self.pinList = []
+		self.attr = ""
+		self.series = "0"
+
+def GetSeriesName(type):
+	if(type.find("LS") >= 0):
+		return "SERIES_74LS"
+	if(type.find("ALS") >= 0):
+		return "SERIES_74ALS"
+	if(type.find("HCT") >= 0):
+		return "SERIES_74HCT"
+	if(type.find("HC") >= 0):
+		return "SERIES_74HC"
+	if(type.find("74S") >= 0):
+		return "SERIES_74S"
+	if(type.find("74N") >= 0):
+		return "SERIES_74N"
+	return ""
 
 def main(argv):
 	print ("// opening: "+ argv[1])
@@ -38,10 +55,19 @@ def main(argv):
 				name = s[1]
 				# Modify type name...
 				# SN.. -> .., LS,HC,HCT -> remove, 40H->74, 
+				attr = ""
+				series = GetSeriesName(type)
+				
+				s_type = type.split("_", 2)
+				if(len(s_type) >= 2): attr = s_type[1]
 				type = type.replace("SN","")
+				type = type.replace("TC","")
 				type = type.replace("LS","")
+				type = type.replace("ALS","")
 				type = type.replace("HCT","")
 				type = type.replace("HC","")
+				type = type.replace("S","")
+				type = type.replace("74N","74")# 明示的に 74N を指定している場合
 				type = type.replace("40H","74")
 				type = re.findall(r"\d+", type) # 先頭の数字だけ
 				if(len(type)):
@@ -51,6 +77,8 @@ def main(argv):
 					ic = ICList()
 					ic.type = "C"+type[0]
 					ic.name = name
+					ic.attr = attr
+					ic.series = series
 					ic.pinList = ["w_nc" for i in range(24)] # dummy
 					icInstance[name] = ic
 			elif(curLineBlock == 2):
@@ -100,6 +128,10 @@ def main(argv):
 		# for old compiler this is not supported. implicitly add -std=c++0x option if you use gcc 4.6.
 		print("\tvector<Wire*> pin_{} = {{\n\t\t{}}};".format(d.name, pinDefText))
 		print("\t{1}* {0} = new {1}(pin_{0});".format(d.name, d.type))
+		if(len(d.attr)):
+			print("\t{0}->SetAttribute(\"{1}\");".format(d.name, d.attr))
+		if(len(d.series)):
+			print("\t{0}->SetSeries({1});".format(d.name, d.series))
 	
 	print("\t// IC Manager-------------------------------------------")
 	for key in list(icInstance):

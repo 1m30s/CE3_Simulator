@@ -136,17 +136,47 @@ private:
 #define VCC -2
 #define GND -1
 #define NC  -3
+#define SERIES_UNDEFINED 0
+#define SERIES_74N 1
+#define SERIES_74LS 2
+#define SERIES_74ALS 3
+#define SERIES_74S 4
+#define SERIES_74L 5
+#define SERIES_74H 6
+
+#define SERIES_74HC 8
+#define SERIES_74HCT 9
+#define SERIES_74AC 10
+#define SERIES_74ACT 11
+#define SERIES_74LVC 12
+
+#define SERIES_4000 16
+
+extern int aa;
 class CIC
 {
 public:
-	CIC(){}
-	CIC(const vector<Wire*>& pinList){}
+	CIC(){m_attrText[0] = 0;}
+	CIC(const vector<Wire*>& pinList){m_attrText[0] = 0;}
 	virtual ~CIC(){}
 	virtual void Tick1() {}
 	virtual void Tick2() {}
+	void SetAttribute(const char* attrText) // 
+	{
+		strncpy(m_attrText, attrText, 31);
+	}
+	void SetSeries(int series)
+	{
+		m_series = series;
+	}
 protected:
 	vector<Wire*> m_pinList;
-	void ConvertFromPinNumberList(const vector<Wire*> pinList, vector<Wire*> orderedPinList, 
+	int m_series;
+	char m_attrText[32]; // max. 32 bytes attribute
+	// IC名の _ 以降を attribute として、ROM のバイナリや Multivibrator の時定数を指定
+	
+	// Helper Function
+	void ConvertFromPinNumberList(const vector<Wire*> pinList, vector<Wire*>& orderedPinList, 
 		const int* pinNumberList, int sz)
 	{
 		orderedPinList.resize(sz);
@@ -183,7 +213,7 @@ protected:
 class CICManager
 {
 public:
-	CICManager(int tickCnt = 8, int outputDetect = 0)
+	CICManager(int tickCnt = 16, int outputDetect = 0)
 	{
 		m_tickCnt = tickCnt;
 		m_outputDetect = outputDetect;

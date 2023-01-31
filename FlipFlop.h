@@ -52,6 +52,8 @@ public:
 	
 	virtual void Tick1() // (for flip-flops,) output signal is not updated to avoid racing
 	{
+		//printf("Tick...");
+		//printf("CC=%d,PL=%d\n", m_circuitCount, m_pinListCount);
 		int i;
 		for(i=0; i<m_circuitCount; i++)
 		{
@@ -72,6 +74,7 @@ public:
 			}
 			m_lastCLK[i] = clk;
 		}
+		//printf("OK...\n");
 	}
 	virtual void Tick2() // output signal will be updated
 	{
@@ -249,6 +252,7 @@ protected:
 	int m_masterSlave;
 	int m_lastCLK[8];
 	int m_intVal[8];
+	int m_lastInput;
 	void Init(const vector<Wire*>& pinList, const int* attr)
 	{
 		//memset(m_attr, 0, sizeof(m_attr));
@@ -264,6 +268,7 @@ public:
 		m_circuitCount = 0;
 		m_pinListCount = 7;
 		
+		m_lastInput = 0;
 		m_negEdge = 0;
 		m_masterSlave = 0; // M-S-FF mode (input change is inhibited when clock is low)
 		// 0:CLK, 1:J, 2: K, 3:/CLR,4:/SET, 5:/Q, 6:Q
@@ -289,15 +294,27 @@ public:
 				m_intVal[i] = 0x1;
 			}else{
 				if(m_lastCLK[i] == 0 && clk){ // Rising Edge
-					if(m_pinList[i*m_pinListCount + 1]->Get() == 1 && m_pinList[i*m_pinListCount + 2]->Get() == 1){ // J=1, K=1
+					int curInput = (m_pinList[i*m_pinListCount + 1]->Get() << 1) | m_pinList[i*m_pinListCount + 2]->Get();
+					if(curInput == 3){ // J=1, K=1
 						m_intVal[i] ^= 0x3;
-					}else if(m_pinList[i*m_pinListCount + 1]->Get() == 1 && m_pinList[i*m_pinListCount + 2]->Get() == 0){ // J=1, K=0
+					}else if(curInput == 2){ // J=1, K=0
 						m_intVal[i] = 1; // H
-					}else if(m_pinList[i*m_pinListCount + 1]->Get() == 0 && m_pinList[i*m_pinListCount + 2]->Get() == 1){ // J=0, K=1
+					}else if(curInput == 1){ // J=0, K=1
 						m_intVal[i] = 2; // L
 					}
 				}
 				m_lastCLK[i] = clk;
+			}
+			
+			// Error Check (for 74N)
+			// Data change from H to L while CLK=H is inhibited.
+			if(m_series == SERIES_74N){
+				int curInput = (m_pinList[i*m_pinListCount + 1]->Get() << 1) | m_pinList[i*m_pinListCount + 2]->Get();
+				if(clk == 1 && (m_lastInput != 0) && curInput != m_lastInput) // mode falling edge while CLK=H
+				{
+					printf("Warning: inhibited data change detected while CLK=H. (JK-FF)\n");
+				}
+				m_lastInput = curInput;
 			}
 		}
 	}
@@ -522,12 +539,14 @@ class C74194: public CIC
 {
 protected:
 	int m_intVal, m_lastCLK;
+	int m_lastMode;
 public:
 	C74194(const vector<Wire*>& pinList)
 	{
 		m_pinList = pinList;
 		m_intVal = 0x00;
 		m_lastCLK = 1;
+		m_lastMode = 0;
 	}
 	
 	virtual void Tick1() // (for flip-flops,) output signal is not updated to avoid racing
@@ -554,6 +573,15 @@ public:
 				m_intVal |= (m_pinList[6]->Get()<<3); // D
 			}
 			
+		}
+		// Error Check (for 74N)
+		if(m_series == SERIES_74N){
+			int mode = m_pinList[9]->Get() | (m_pinList[10]->Get()<<1);
+			if(clk == 0 && (m_lastMode != 0 && mode == 0)) // mode falling edge while CLK=L
+			{
+				printf("Warning: explicit clock edge detected by mode change while CLK=L. (74194)\n");
+			}
+			m_lastMode = mode;
 		}
 		m_lastCLK = clk;
 		

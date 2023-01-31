@@ -459,10 +459,10 @@ public:
 };
 
 
-class C7412: public CGenericGate
+class C7411: public CGenericGate
 {
 public:
-	C7412(const vector<Wire*>& pinList) : CGenericGate(GATE_TYPE_AND)
+	C7411(const vector<Wire*>& pinList) : CGenericGate(GATE_TYPE_AND)
 	{
 		int attr[2] = {3,4};
 
@@ -474,14 +474,14 @@ public:
 	}
 };
 
-class C7422: public CGenericGate
+class C7421: public CGenericGate
 {
 public:
-	C7422(const vector<Wire*>& pinList) : CGenericGate(GATE_TYPE_AND)
+	C7421(const vector<Wire*>& pinList) : CGenericGate(GATE_TYPE_AND)
 	{
 		int attr[2] = {2,5};
 
-		vector<Wire*> pll(12);
+		vector<Wire*> pll(10);
 		int pl[10] = {1,2,4,5,6, 13,12,10,9,8};
 		int i;
 		for(i=0; i<pll.size(); i++) pll[i] = pinList[pl[i]];
@@ -537,6 +537,21 @@ class C7432: public CGenericGate
 {
 public:
 	C7432(const vector<Wire*>& pinList) : CGenericGate(GATE_TYPE_OR)
+	{
+		int attr[2] = {4,3}; // Quad, 3 pins per element
+
+		vector<Wire*> pll(12);
+		int pl[12] = {1,2,3,4,5,6, 13,12,11,10,9,8};
+		int i;
+		for(i=0; i<pll.size(); i++) pll[i] = pinList[pl[i]];
+		Init(pll, attr);
+	}
+};
+// XOR
+class C7486: public CGenericGate
+{
+public:
+	C7486(const vector<Wire*>& pinList) : CGenericGate(GATE_TYPE_XOR)
 	{
 		int attr[2] = {4,3}; // Quad, 3 pins per element
 
