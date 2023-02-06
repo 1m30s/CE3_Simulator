@@ -446,6 +446,52 @@ public:
 		}
 	}
 };
+class C74373: public GenericLatch
+{
+public:
+	C74373(const vector<Wire*>& pinList): GenericLatch()
+	{
+		const int attr[3] = {8,5,0};
+		// 0:LE, 1:D, 2: /OE, 3:/Q, 4:Q
+		const int pl[8*6] = {
+			11,3,1,NC,2, 
+			11,4,1,NC,5, 
+			11,7,1,NC,6, 
+			11,8,1,NC,9, 
+			11,13,1,NC,12, 
+			11,14,1,NC,15, 
+			11,17,1,NC,16, 
+			11,18,1,NC,19
+		};
+		vector<Wire*> pll;
+		ConvertFromPinNumberList(pinList, pll, pl, sizeof(pl)/sizeof(int));
+		
+		Init(pll, attr);
+	}
+};
+class C74573: public GenericLatch
+{
+public:
+	C74573(const vector<Wire*>& pinList): GenericLatch()
+	{
+		const int attr[3] = {8,0,0};
+		// 0:LE, 1:D, 2: /OE, 3:/Q, 4:Q
+		const int pl[8*6] = {
+			11,2,1,NC,19, 
+			11,3,1,NC,18, 
+			11,4,1,NC,17, 
+			11,5,1,NC,16, 
+			11,6,1,NC,15, 
+			11,7,1,NC,14, 
+			11,8,1,NC,13, 
+			11,9,1,NC,12
+		};
+		vector<Wire*> pll;
+		ConvertFromPinNumberList(pinList, pll, pl, sizeof(pl)/sizeof(int));
+		
+		Init(pll, attr);
+	}
+};
 /*
 class C7475(GenericLatch):
 	def __init__(self,pin):
@@ -564,7 +610,7 @@ public:
 				m_intVal = ((m_intVal << 1) | (m_pinList[2]->Get())) & 0x0F; // Load to A
 			}
 			else if(ctl == 2){ // Shift Left
-				m_intVal = (m_intVal >> 1) | (m_pinList[7]->Get()<<3); // Load to D
+				m_intVal = ((m_intVal >> 1) | (m_pinList[7]->Get()<<3)) & 0x0F; // Load to D
 			}
 			else if(ctl == 3){ // Load
 				m_intVal = (m_pinList[3]->Get()<<0);  // A

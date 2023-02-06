@@ -7,5 +7,6 @@
 #include "Counter.h"
 #include "FlipFlop.h"
 #include "Decoder.h"
+#include "Memory.h"
 
 CIC* CreateIC(const char* name, const vector<Wire*>& pinList);

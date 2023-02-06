@@ -103,6 +103,9 @@ public:
 		int i, j;
 		for(i=0; i<m_attr[0]; i++)
 		{
+			// [0]: EN
+			// [1]: Input
+			// [2]: Output
 			int en = m_pinList[i*3 + 0]->Get();
 			if(en == ((m_attr[2] >> i) & 1))
 			{
@@ -200,6 +203,87 @@ public:
 
 		vector<Wire*> pll(4*3);
 		int pl[12] = {1,2,3,4,5,6, 13,12,11,10,9,8};
+		int i;
+		for(i=0; i<pll.size(); i++) pll[i] = pinList[pl[i]];
+		Init(pll, attr);
+	}
+};
+
+class C74365: public CGenericBuffer
+{
+public:
+	C74365(const vector<Wire*>& pinList) : CGenericBuffer()
+	{
+		m_pinList = pinList;
+	}
+	virtual void Tick1()
+	{
+		if(m_pinList.size()<2) return;
+		int en  = (m_pinList[1]->Get() == 0) || (m_pinList[15]->Get() == 0); // /EN 
+		
+		if(en) // /EN=0
+		{
+			m_pinList[3]->Set(m_pinList[2]->Get());
+			m_pinList[5]->Set(m_pinList[4]->Get());
+			m_pinList[7]->Set(m_pinList[6]->Get());
+			m_pinList[9]->Set(m_pinList[10]->Get());
+			m_pinList[11]->Set(m_pinList[12]->Get());
+			m_pinList[13]->Set(m_pinList[14]->Get());
+		}
+	}
+};
+class C74366: public CGenericBuffer
+{
+public:
+	C74366(const vector<Wire*>& pinList) : CGenericBuffer()
+	{
+		m_pinList = pinList;
+	}
+	virtual void Tick1()
+	{
+		if(m_pinList.size()<2) return;
+		int en  = (m_pinList[1]->Get() == 0) || (m_pinList[15]->Get() == 0); // /EN 
+		
+		if(en) // /EN=0
+		{
+			m_pinList[3]->Set(m_pinList[2]->Get() ^ 1);
+			m_pinList[5]->Set(m_pinList[4]->Get() ^ 1);
+			m_pinList[7]->Set(m_pinList[6]->Get() ^ 1);
+			m_pinList[9]->Set(m_pinList[10]->Get() ^ 1);
+			m_pinList[11]->Set(m_pinList[12]->Get() ^ 1);
+			m_pinList[13]->Set(m_pinList[14]->Get() ^ 1);
+		}
+	}
+};
+class C74367: public CGenericBuffer
+{
+public:
+	C74367(const vector<Wire*>& pinList) : CGenericBuffer()
+	{
+		int attr[3] = {6,0,0}; // Quad, Non-inv, Negative EN
+		// [0]: EN
+		// [1]: Input
+		// [2]: Output
+
+		vector<Wire*> pll(6*3);
+		int pl[18] = {1,2,3, 1,4,5, 1,6,7, 15,10,9, 15,12,11, 15,14,13};
+		int i;
+		for(i=0; i<pll.size(); i++) pll[i] = pinList[pl[i]];
+		Init(pll, attr);
+	}
+};
+class C74368: public CGenericBuffer
+{
+public:
+	C74368(const vector<Wire*>& pinList) : CGenericBuffer()
+	{
+		int attr[3] = {6,0xFF,0}; // Quad, Inv, Negative EN
+		// [0]: EN
+		// [1]: Input
+		// [2]: Output
+
+		vector<Wire*> pll(6*3);
+		int pl[18] = {1,2,3, 1,4,5, 1,6,7, 15,10,9, 15,12,11, 15,14,13};
 		int i;
 		for(i=0; i<pll.size(); i++) pll[i] = pinList[pl[i]];
 		Init(pll, attr);
@@ -391,7 +475,7 @@ public:
 		int attr[2] = {3,4};
 
 		vector<Wire*> pll(12);
-		int pl[12] = {1,2,3,12, 3,4,5,6, 11,10,9,8};
+		int pl[12] = {1,2,13,12, 3,4,5,6, 11,10,9,8};
 		int i;
 		for(i=0; i<pll.size(); i++) pll[i] = pinList[pl[i]];
 		Init(pll, attr);
@@ -467,7 +551,7 @@ public:
 		int attr[2] = {3,4};
 
 		vector<Wire*> pll(12);
-		int pl[12] = {1,2,3,12, 3,4,5,6, 11,10,9,8};
+		int pl[12] = {1,2,13,12, 3,4,5,6, 11,10,9,8};
 		int i;
 		for(i=0; i<pll.size(); i++) pll[i] = pinList[pl[i]];
 		Init(pll, attr);
@@ -511,7 +595,7 @@ public:
 		int attr[2] = {3,4};
 
 		vector<Wire*> pll(12);
-		int pl[12] = {1,2,3,12, 3,4,5,6, 11,10,9,8};
+		int pl[12] = {1,2,13,12, 3,4,5,6, 11,10,9,8};
 		int i;
 		for(i=0; i<pll.size(); i++) pll[i] = pinList[pl[i]];
 		Init(pll, attr);
@@ -560,5 +644,76 @@ public:
 		int i;
 		for(i=0; i<pll.size(); i++) pll[i] = pinList[pl[i]];
 		Init(pll, attr);
+	}
+};
+
+
+// AND-OR-INV
+class C7454: public CIC
+{
+public:
+	C7454(const vector<Wire*>& pinList)
+	{
+		m_pinList = pinList;
+	}
+	virtual void Tick1()
+	{
+		int i, j;
+		if((m_attrText[0] == 'L' && m_attrText[1] == 'S') || 
+			(m_attrText[0] == 'A' && m_attrText[1] == 'L'))
+		{
+			int res = 0;
+			if(m_pinList[1]->Get() && m_pinList[2]->Get() && m_pinList[3]->Get()) res |= 1;
+			if(m_pinList[4]->Get() && m_pinList[5]->Get()) res |= 1;
+			if(m_pinList[9]->Get() && m_pinList[10]->Get() && m_pinList[11]->Get()) res |= 1;
+			if(m_pinList[12]->Get() && m_pinList[13]->Get()) res |= 1;
+			m_pinList[6]->Set(res ^ 1);
+		}
+		else
+		{
+			int res = 0;
+			if(m_pinList[1]->Get() && m_pinList[13]->Get()) res |= 1;
+			if(m_pinList[2]->Get() && m_pinList[3]->Get()) res |= 1;
+			if(m_pinList[4]->Get() && m_pinList[5]->Get()) res |= 1;
+			if(m_pinList[9]->Get() && m_pinList[10]->Get()) res |= 1;
+			m_pinList[8]->Set(res ^ 1);
+		}
+	}
+};
+
+// AND-OR-INV
+class C7451: public CIC
+{
+public:
+	C7451(const vector<Wire*>& pinList)
+	{
+		m_pinList = pinList;
+	}
+	virtual void Tick1()
+	{
+		int i, j;
+		if((m_attrText[0] == 'L' && m_attrText[1] == 'S') || 
+			(m_attrText[0] == 'A' && m_attrText[1] == 'L'))
+		{
+			int res = 0;
+			if(m_pinList[2]->Get() && m_pinList[3]->Get()) res |= 1;
+			if(m_pinList[4]->Get() && m_pinList[5]->Get()) res |= 1;
+			m_pinList[6]->Set(res ^ 1);
+			res = 0;
+			if(m_pinList[1]->Get() && m_pinList[13]->Get() && m_pinList[12]->Get()) res |= 1;
+			if(m_pinList[11]->Get() && m_pinList[10]->Get() && m_pinList[9]->Get()) res |= 1;
+			m_pinList[8]->Set(res ^ 1);
+		}
+		else
+		{
+			int res = 0;
+			if(m_pinList[2]->Get() && m_pinList[3]->Get()) res |= 1;
+			if(m_pinList[4]->Get() && m_pinList[5]->Get()) res |= 1;
+			m_pinList[6]->Set(res ^ 1);
+			res = 0;
+			if(m_pinList[1]->Get() && m_pinList[13]->Get()) res |= 1;
+			if(m_pinList[10]->Get() && m_pinList[9]->Get()) res |= 1;
+			m_pinList[8]->Set(res ^ 1);
+		}
 	}
 };

@@ -161,7 +161,7 @@ public:
 	virtual ~CIC(){}
 	virtual void Tick1() {}
 	virtual void Tick2() {}
-	void SetAttribute(const char* attrText) // 
+	virtual void SetAttribute(const char* attrText) // 
 	{
 		strncpy(m_attrText, attrText, 31);
 	}
@@ -263,8 +263,20 @@ private:
 // type: Tick(0), Clock(1)
 #define LOG_TYPE_TICK 0
 #define LOG_TYPE_CLOCK 1
+#define BUS_SIZE 6
+#define BUS_IDX_EXCLUDE_FROM_DESCRETE_LINE 0x00010000
 class CSignalLogger
 {
+private:
+	int m_type, m_divider;
+	int m_prescaler;
+	vector<Wire*> m_signalList; // digital signal
+	vector<int> m_busDecode[16];
+	vector<uint8_t> m_log;
+	
+	vector<Wire*> m_analogSignalList; // analog signal ([0]: LSb)
+	vector<int>   m_signalTextOutputFlag;
+	vector<float> m_analogLog;
 public:
 	CSignalLogger(int type=1, int divider=1)
 	{
@@ -279,11 +291,27 @@ public:
 	// if busIdx used LSb signal has to be appended first.
 	void Append(Wire* pSignal, int busIdx = -1){
 		if(pSignal){
-			m_signalList.push_back(pSignal);
 			if(busIdx >= 0)
 			{
-				m_busDecode[busIdx].push_back(m_signalList.size()-1);
+				int flag = busIdx & 0xFFFF0000;
+				
+				m_signalList.push_back(pSignal);
+				
+				if(flag & BUS_IDX_EXCLUDE_FROM_DESCRETE_LINE) m_signalTextOutputFlag.push_back(0);
+				else m_signalTextOutputFlag.push_back(1);
+				
+				m_busDecode[busIdx & 7].push_back(m_signalList.size()-1);
 			}
+			else
+			{
+				m_signalList.push_back(pSignal);
+				m_signalTextOutputFlag.push_back(1);
+			}
+		}
+	}
+	void AppendAnalog(Wire* pSignal){
+		if(pSignal){
+			m_analogSignalList.push_back(pSignal);
 		}
 	}
 	void Log()
@@ -300,6 +328,16 @@ public:
 			if(m_signalList[i]->Get()) d |= 1<<(i%8);
 		}
 		m_log.push_back(d);
+		// Analog
+		if(m_analogSignalList.size())
+		{
+			int val = 0;
+			for(i=0; i<m_analogSignalList.size(); i++)
+			{
+				if(m_analogSignalList[i]->Get()) val |= (1<<i);
+			}
+			m_analogLog.push_back(-1.0 + 5.0 * val / (2<<m_analogSignalList.size()));
+		}
 	}
 	void OnTick()
 	{
@@ -322,20 +360,26 @@ public:
 		if(fp == NULL) return -1;
 		
 		// Bus Decode
-		for(i=0; i<4; i++)
+		for(i=0; i<BUS_SIZE; i++)
 		{
 			fprintf(fp, "BUS%d,", i);
 		}
 		
-		// Signal
+		// Log header
 		//for(i=0; i<m_signalList.size(); i++)
+		vector<int> labelLenList(m_signalList.size());
 		for(i=m_signalList.size()-1; i>=0; i--)
 		{
-			if(strncmp(m_signalList[i]->name, "w_", 2)){
-				fprintf(fp, "%s,", &m_signalList[i]->name[2]);
-			}
-			else{
-				fprintf(fp, "%s,", m_signalList[i]->name);
+			if(m_signalTextOutputFlag[i])
+			{
+				char* p = m_signalList[i]->name;
+				if(strncmp(m_signalList[i]->name, "w_", 2) == 0){
+					p = &m_signalList[i]->name[2];
+				}
+				else{
+				}
+				fprintf(fp, "%s,", p);
+				labelLenList[i] = strlen(p);
 			}
 		}
 		fprintf(fp, "\n");
@@ -344,28 +388,43 @@ public:
 		for(lpos=0; lpos<llen; lpos++)
 		{
 			// Bus Decode
-			for(i=0; i<4; i++)
+			for(i=0; i<BUS_SIZE; i++)
 			{
 				int d = 0;
 				int j;
 				for(j=0; j<m_busDecode[i].size(); j++)
 				{
 					//d = d<<1;
-					int bp = m_busDecode[i][j];
+					int bp = m_busDecode[i][j] & 0xFFFF;
 					if(m_log[lpos*ls2 + (bp/8) ] & (1<<(bp%8))) d |= (1<<j);
 				}
 				if(m_busDecode[i].size() >= 9){
 					fprintf(fp,"%04X,", d);
 				}else if(m_busDecode[i].size() >= 1){
-					fprintf(fp,"%02X,", d);
+					fprintf(fp,"  %02X,", d);
 				}else{
-					fprintf(fp,",");
+					fprintf(fp,"    ,");
 				}
 			}
+			
 			// Signal
 			for(i=m_signalList.size()-1; i>=0; i--)
 			{
-				fprintf(fp, "%d,", (m_log[lpos * ls2 + (i/8) ] & (1<<(i%8)) )? 1: 0);
+				char buf[32];
+				if(m_signalTextOutputFlag[i])
+				{
+					memset(buf, ' ', 31);
+					if(labelLenList[i] > 0){
+						if(m_log[lpos * ls2 + (i/8) ] & (1<<(i%8)) ) buf[labelLenList[i]-1] = '1';
+						else buf[labelLenList[i]-1] = '0';
+						buf[labelLenList[i]] = ',';
+						buf[labelLenList[i]+1] = '\0';
+						fputs(buf, fp);
+					}
+					else{
+						fprintf(fp, "%d,", (m_log[lpos * ls2 + (i/8) ] & (1<<(i%8)) )? 1: 0);
+					}
+				}
 			}
 			fprintf(fp, "\n");
 		}
@@ -390,12 +449,65 @@ public:
 				"[device 1]\n"
 				"capturefile=logic-1\n");
 		fprintf(fp2, "samplerate=%.2f MHz\n", freq);
-		fprintf(fp2, "total probes=%d\n", (m_signalList.size()));
-		fprintf(fp2, "total analog = 0\n");
+		int analogCH = 0;
+		fprintf(fp2, "total probes=%d\n", (m_signalList.size())); // ‚±‚¿‚ç‚ªæ‚É‚È‚¢‚Æ—Ž‚¿‚é
+		
+		if(m_analogSignalList.size())
+		{
+			analogCH = 1;
+			fprintf(fp2, "total analog = 1\n");
+			
+		}
+		else
+		{
+			fprintf(fp2, "total analog = 0\n");
+		}
 		for(i=0; i<m_signalList.size(); i++){
 			fprintf(fp2, "probe%d = %s\n", i+1, m_signalList[i]->name);
 		}
+		if(m_analogSignalList.size())
+		{
+			fprintf(fp2, "analog%d=%s\n", m_signalList.size()+1, m_analogSignalList[0]->name);
+			
+			char analogFilename[256];
+			strcpy(analogFilename, tempfile);
+			strcat(analogFilename, "_analog");
+			FILE* fp3 = fopen(analogFilename, "wb");
+			if(fp3){
+				int i, sz = m_analogLog.size();
+				for(i=0; i<sz; i++){
+					fwrite(&m_analogLog[i], sizeof(float), 1, fp3);
+					//int d = m_analogLog[i] * 256;
+					//fwrite(&d, sizeof(float), 1, fp3);
+				}
+				fclose(fp3);
+			}
+		}
+		
 		fprintf(fp2, "unitsize=%d\n", (m_signalList.size()-1)/8+1 );
+		
+		/*
+		if(m_analogSignalList.size())
+		{
+			fprintf(fp2, 
+					"[device 2]\n");
+			int analogCH = 1;
+			fprintf(fp2, "samplerate=%.2f MHz\n", freq);
+			fprintf(fp2, "total analog = 1\n");
+			fprintf(fp2, "analog%d=%s\n", 1, m_analogSignalList[0]->name);
+			
+			char analogFilename[256];
+			strcpy(analogFilename, tempfile);
+			strcat(analogFilename, "_analog");
+			FILE* fp3 = fopen(analogFilename, "wb");
+			if(fp3){
+				int i, sz = m_analogLog.size();
+				for(i=0; i<sz; i++){
+					fwrite(&m_analogLog[i], sizeof(float), 1, fp3);
+				}
+				fclose(fp3);
+			}
+		}*/
 		fclose(fp2);
 			/*
 			metadata = "[global]\n"\
@@ -419,11 +531,5 @@ public:
 		return 0;
 	}
 	
-private:
-	int m_type, m_divider;
-	int m_prescaler;
-	vector<Wire*> m_signalList;
-	vector<int> m_busDecode[4];
-	vector<uint8_t> m_log;
 };
 

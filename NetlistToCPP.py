@@ -53,6 +53,7 @@ def main(argv):
 				#s = re.split(r'[! ;\n]+', line[2:])
 				type = s[0].split("! ")[1]
 				name = s[1]
+				if(name.startswith("U") == False): continue
 				# Modify type name...
 				# SN.. -> .., LS,HC,HCT -> remove, 40H->74, 
 				attr = ""
@@ -100,7 +101,9 @@ def main(argv):
 					t = pin.split(".", 2)
 					if(len(t) == 2):
 						try:
-							icInstance[t[0]].pinList[int(t[1])] = curWireName
+							pn = int(t[1])
+							while(len(icInstance[t[0]].pinList) <= pn): icInstance[t[0]].pinList.append("w_nc")
+							icInstance[t[0]].pinList[pn] = curWireName
 						except:
 							pass
 	#f = argv[1]

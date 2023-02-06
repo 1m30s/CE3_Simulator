@@ -1,6 +1,7 @@
 import zipfile
 import os
 import sys
+import configparser
 
 signalList = [[1, "DATA1"],[2,"DATA2"],[3,"DATA3"],[4,"DATA4"],
 	[5,"DATA5"],[6,"DATA6"],[7,"DATA7"],[8,"DATA8"],
@@ -61,6 +62,12 @@ def Generate2(output_fn, data_fn, metadata_fn):
 	
 	f = open(data_fn, "rb")
 	
+	# read metadata
+	meta = configparser.ConfigParser()
+	meta.read(metadata_fn)
+	analogch = meta["device 1"]["total analog"]
+	
+	# Digital
 	# output files per 4MB
 	chunk = 0
 	#fsize = len(data)
@@ -70,6 +77,20 @@ def Generate2(output_fn, data_fn, metadata_fn):
 		chunk += 1
 		d = f.read(4*1024*1024)
 	
+	# Analog
+	if(int(analogch) > 0):
+		for chn in range(1,64):
+			if(meta["device 1"].get("analog{}".format(chn)) != None): break
+		try:
+			chunk = 0
+			f2 = open(data_fn + "_analog", "rb")
+			d = f2.read(4*1024*1024)
+			while(d):
+				zip.writestr("analog-1-{}-{}".format(chn, chunk+1), d )
+				chunk += 1
+				d = f2.read(4*1024*1024)
+		except:
+			pass
 
 if __name__ == '__main__':
 	# argv[1]: input, argv[2]: output

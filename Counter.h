@@ -37,6 +37,7 @@ protected:
 	int m_modulo;
 	uint8_t m_lastCLK;
 	uint8_t m_intVal[4]; // Q0-3
+	uint8_t m_en_polarity; // 0 -> negative (74169 type) / 1 -> positive (74161 type)
 	
 	void FF_Init()
 	{
@@ -69,6 +70,7 @@ public:
 	{
 		//m_pinList = pinList;
 		m_modulo = 16;
+		m_en_polarity = 1;
 		
 		FF_Init(); // Initialize internal value
 	}
@@ -92,9 +94,9 @@ public:
 					m_intVal[1] = m_pinList[4]->Get();
 					m_intVal[2] = m_pinList[5]->Get();
 					m_intVal[3] = m_pinList[6]->Get();
-				}else if(m_pinList[7]->Get() == 1 && m_pinList[12]->Get() == 1){ //// Count Up/Dn
+				}else if(m_pinList[7]->Get() == m_en_polarity && m_pinList[12]->Get() == m_en_polarity){ //// Count Up/Dn
 					m_intVal[0] ^= 1;
-					int cntDir = (m_pinList[20]->Get() ^ 1); // 0: up, 1: down
+					int cntDir = (m_pinList[20]->Get() ^ 1); // pin value 1: up, 0: down
 					if(m_intVal[0] == cntDir ){
 						m_intVal[1] ^= 1;
 						if(m_intVal[1] == cntDir ){
@@ -147,17 +149,17 @@ public:
 				m_intVal[2] == 1 &&
 				m_intVal[3] == 1) isFull = 1;
 		}
-		int RCO = 0;
-		if (isFull && m_pinList[12]->Get() == 1){ // R Carry (Sync)
-			RCO = 1;
+		int RCO = 1 ^ m_en_polarity;
+		if (isFull && m_pinList[12]->Get() == m_en_polarity){ // R Carry (Sync)
+			RCO ^= 1;
 		}
 		m_pinList[19]->Set(RCO); // R Carry
 		
 		int CCO = 0;
 		if ( isFull &&
 			m_pinList[2]->Get() == 1 && // CLK = 1
-			m_pinList[7]->Get() == 1 &&
-			m_pinList[12]->Get() == 1){ 
+			m_pinList[7]->Get() == m_en_polarity &&
+			m_pinList[12]->Get() == m_en_polarity){ 
 			CCO = 1; // C Carry (Async)
 		}
 		
@@ -168,6 +170,33 @@ public:
 class C74561: public GenericSyncCounter
 {
 	
+};
+class C74169: public GenericSyncCounter
+{
+public:
+	C74169(const vector<Wire*>& pinList) : GenericSyncCounter()
+	{
+		vector<Wire*> p2(21, g_wireManager.GetVCC());
+		p2[20]  = pinList[1]; // U/D
+		p2[2]  = pinList[2]; // clock
+		p2[3]  = pinList[3]; // IN
+		p2[4]  = pinList[4];
+		p2[5]  = pinList[5];
+		p2[6]  = pinList[6];
+		p2[7]  = pinList[7]; // P_IN
+		p2[11] = pinList[9]; // sync load
+		p2[12] = pinList[10]; // T_IN
+		p2[13] = pinList[11]; // Out
+		p2[14] = pinList[12]; // Out
+		p2[15] = pinList[13]; // Out
+		p2[16] = pinList[14]; // Out
+		p2[17] = g_wireManager.GetGND(); // /OE
+		p2[18] = g_wireManager.GetNC();
+		p2[19] = pinList[15]; // Ripple Carry
+		
+		GenericSyncCounter::Pin_Init(p2);
+		m_en_polarity = 0; // negative enable
+	}
 };
 class C74161: public GenericSyncCounter
 {
@@ -554,13 +583,10 @@ protected:
 		m_lastCLK = 1;
 		m_intVal = 0;
 	}
-	void Pin_Init(const vector<Wire*>& pinList)
+public:
+	C74461(const vector<Wire*>& pinList)
 	{
 		m_pinList = pinList;
-	}
-public:
-	C74461()
-	{
 		FF_Init(); // Initialize internal value
 	}
 	virtual void Tick1() //// (for flip-flops,) output signal is not updated to avoid racing
