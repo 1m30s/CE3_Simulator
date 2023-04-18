@@ -19,8 +19,17 @@ protected:
 		m_bitWidth = attr[0]; // 1-8
 		m_addrWidth = attr[1];
 		
+		int memorySize = 1 << m_addrWidth;
+		m_memorySize = memorySize;
+		//printf("memorySize = %d\n", memorySize);
+		int i;
+		// Allocate
+		if(m_memoryArray) delete [] m_memoryArray;
+		m_memoryArray = new unsigned char[memorySize];
+		memset(m_memoryArray, 0, memorySize);
+		
 		m_pinList = pinList; // list of pin list
-		// [0-1]: /OE, [1-m_bitWidth]: Data bus, [m_bitWidth+1-(m_bitWidth+m_addrWidth)]: Address Bus
+		// [0-1]: /OE, [2-m_bitWidth]: Data bus, [m_bitWidth+2-]: Address Bus
 	}
 public:
 	GenericROM()
@@ -41,19 +50,13 @@ public:
 	}
 	void Memory_Init(const char* fn, int initVal)
 	{
-		int memorySize = 1 << m_addrWidth;
-		m_memorySize = memorySize;
 		//printf("memorySize = %d\n", memorySize);
 		int i;
-		// Allocate
-		if(m_memoryArray) delete [] m_memoryArray;
-		m_memoryArray = new unsigned char[memorySize];
-		memset(m_memoryArray, initVal, memorySize);
 		if(fn[0])
 		{
 			FILE* fp = fopen(fn, "rb");
 			if(fp){
-				for(i=0; i<memorySize; i++)
+				for(i=0; i<m_memorySize; i++)
 				{
 					int a = fgetc(fp);
 					if(a == EOF) break;
@@ -78,7 +81,7 @@ public:
 			}
 			if(addr >= m_memorySize) addr = 0;
 			int d = m_memoryArray[addr];
-			// store
+			// read
 			for(i=0; i<m_bitWidth; i++)
 			{
 				if(d & (1<<i)) m_pinList[2+i]->Set(1);
@@ -176,6 +179,149 @@ public:
 				m_pinList[11]->Set(d&8? 1: 0);
 			}
 		}
+	}
+};
+
+
+
+class GenericRAM: public CIC
+{
+protected:
+	int m_bitWidth, m_addrWidth;
+	unsigned char* m_memoryArray;
+	int m_memorySize;
+	void Init(const vector<Wire*>& pinList, const int* attr)
+	{
+		m_bitWidth = attr[0]; // 1-8
+		m_addrWidth = attr[1];
+		
+		int memorySize = 1 << m_addrWidth;
+		m_memorySize = memorySize;
+		//printf("memorySize = %d\n", memorySize);
+		// Allocate
+		if(m_memoryArray) delete [] m_memoryArray;
+		m_memoryArray = new unsigned char[memorySize];
+		
+		m_pinList = pinList; // list of pin list
+		// [0]: /CS
+		// [1]: /OE
+		// [2]: /WE
+		// [3]: Reserved
+		// [4-m_bitWidth-2]: Data bus, [m_bitWidth+4-]: Address Bus
+	}
+public:
+	GenericRAM()
+	{
+		m_bitWidth  = 0;
+		m_addrWidth = 0;
+		m_memoryArray = NULL;
+		m_memorySize = 0;
+	}
+	virtual ~GenericRAM()
+	{
+		if(m_memoryArray) delete [] m_memoryArray;
+	}
+	void SetAttribute(const char* attrText)// 
+	{
+		CIC::SetAttribute(attrText);
+		Memory_Init(attrText, 0x00); // Load Initial Value here
+	}
+	void Memory_Init(const char* fn, int initVal)
+	{
+		int i;
+		memset(m_memoryArray, initVal, m_memorySize);
+		/*
+		if(fn[0])
+		{
+			FILE* fp = fopen(fn, "rb");
+			if(fp){
+				for(i=0; i<m_memorySize; i++)
+				{
+					int a = fgetc(fp);
+					if(a == EOF) break;
+					m_memoryArray[i] = a;
+				}
+				fclose(fp);
+			}else{
+				printf("Error: can't read %s.\n", fn);
+			}
+		}*/
+	}
+	
+	virtual void Tick1() // (for flip-flops,) output signal is not updated to avoid racing
+	{
+		int i;
+		int addr = 0;
+		for(i=0; i<m_addrWidth; i++)
+		{
+			if(m_pinList[m_bitWidth+4 + i]->Get()) addr |= (1<<i);
+		}
+		if(addr >= m_memorySize) addr = 0;
+	
+		if(m_pinList[0]->Get() == 0) // /CS = 0
+		{
+			if(m_pinList[2]->Get() == 0) // /WE = 0
+			{
+				// Write
+				int d = 0;
+				for(i=0; i<m_bitWidth; i++)
+				{
+					if(m_pinList[4+i]->Get()) d |= (1<<i);
+				}
+				m_memoryArray[addr] = d;
+			}
+			else
+			{
+				// Read
+				if(m_pinList[1]->Get() == 0) // /OE = 0
+				{
+					int d = m_memoryArray[addr];
+					// read
+					for(i=0; i<m_bitWidth; i++)
+					{
+						if(d & (1<<i)) m_pinList[4+i]->Set(1);
+						else m_pinList[4+i]->Set(0);
+					}
+				}
+			}
+		}
+	}
+};
+
+class C6116: public GenericRAM
+{
+public:
+	C6116(const vector<Wire*>& pinList): GenericRAM()
+	{
+		vector<Wire*> newPinList;
+		newPinList.push_back(pinList[18]); // CS
+		newPinList.push_back(pinList[20]); // OE
+		newPinList.push_back(pinList[21]); // WE
+		newPinList.push_back(g_wireManager.GetNC());
+		// Data
+		newPinList.push_back(pinList[9]);
+		newPinList.push_back(pinList[10]);
+		newPinList.push_back(pinList[11]);
+		newPinList.push_back(pinList[13]);
+		newPinList.push_back(pinList[14]);
+		newPinList.push_back(pinList[15]);
+		newPinList.push_back(pinList[16]);
+		newPinList.push_back(pinList[17]);
+		// Addr
+		newPinList.push_back(pinList[8]);//0
+		newPinList.push_back(pinList[7]);
+		newPinList.push_back(pinList[6]);
+		newPinList.push_back(pinList[5]);
+		newPinList.push_back(pinList[4]); //4
+		newPinList.push_back(pinList[3]);
+		newPinList.push_back(pinList[2]);
+		newPinList.push_back(pinList[1]);
+		newPinList.push_back(pinList[23]);//8
+		newPinList.push_back(pinList[22]);
+		newPinList.push_back(pinList[19]);
+		
+		int attr[4] = {8,11,0,0};
+		Init(newPinList, attr);
 	}
 };
 

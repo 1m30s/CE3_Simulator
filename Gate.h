@@ -682,6 +682,26 @@ public:
 };
 
 // AND-OR-INV
+class C7455: public CIC
+{
+public:
+	C7455(const vector<Wire*>& pinList)
+	{
+		m_pinList = pinList;
+	}
+	virtual void Tick1()
+	{
+		int i, j;
+		{
+			int res = 0;
+			if(m_pinList[1]->Get() && m_pinList[2]->Get() && m_pinList[3]->Get() && m_pinList[4]->Get()) res |= 1;
+			if(m_pinList[10]->Get() && m_pinList[11]->Get() && m_pinList[12]->Get() && m_pinList[13]->Get()) res |= 1;
+			m_pinList[8]->Set(res ^ 1);
+		}
+	}
+};
+
+// AND-OR-INV
 class C7451: public CIC
 {
 public:

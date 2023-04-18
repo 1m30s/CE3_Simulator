@@ -13,6 +13,7 @@ class CWireManager;
 class CICManager;
 class CSignalLogger;
 
+#define WIRE_TYPE_OC 0x01
 // To get pre-difined wires from IC module, declare wireman here
 extern CWireManager g_wireManager;
 
@@ -44,6 +45,10 @@ public:
 	}
 	uint8_t Get(){
 		return this->value;
+	}
+	uint8_t IsOCWire()
+	{
+		return (type & (WIRE_TYPE_OC))? 1: 0;
 	}
 	
 	uint8_t value;
@@ -105,6 +110,7 @@ public:
 		{
 			if(strcmp(m_wireList[i]->name, name) == 0) return m_wireList[i];
 		}
+		printf("Wire %s not found.\n", name);
 		return NULL;
 	}
 	Wire* Get(unsigned int i)
@@ -128,6 +134,14 @@ public:
 	//Wire* GetCLK(){
 	//	return w_clk;
 	//}
+	void ResetOCWires()
+	{
+		int i;
+		for(i=0; i<m_wireList.size(); i++)
+		{
+			if(m_wireList[i]->IsOCWire()) m_wireList[i]->Set(1);
+		}
+	}
 private:
 	Wire* w_nc, *w_vcc, *w_gnd, *w_clk;
 	vector<Wire*> m_wireList;
@@ -159,8 +173,8 @@ public:
 	CIC(){m_attrText[0] = 0;}
 	CIC(const vector<Wire*>& pinList){m_attrText[0] = 0;}
 	virtual ~CIC(){}
-	virtual void Tick1() {}
-	virtual void Tick2() {}
+	virtual void Tick1() {} // Wire の参照可能、Wire の更新可能 (Fetch, Gate function)
+	virtual void Tick2() {} // Wire の参照禁止、Wire の更新可能 (Register function, OC Gate)
 	virtual void SetAttribute(const char* attrText) // 
 	{
 		strncpy(m_attrText, attrText, 31);
@@ -234,6 +248,7 @@ public:
 		m_ICList.push_back(pIC);
 	}
 	// Call Tick over all ICs
+#if 0
 	void Tick1()
 	{
 		int i, tick;
@@ -252,6 +267,30 @@ public:
 		Tick2(); // FF Update
 		Tick1(); // Gate Update
 	}
+#endif
+#if 1
+	void Tick1()
+	{
+		int i;
+			for(i=0; i<m_ICList.size(); i++) m_ICList[i]->Tick1();
+	}
+	void Tick2()
+	{
+		int i;
+		for(i=0; i<m_ICList.size(); i++) m_ICList[i]->Tick2();
+	}
+	void Tick()
+	{
+		int tick;
+		for(tick=0; tick<m_tickCnt; tick++)
+		{
+			Tick1(); // Gate Update
+			// Init OC Wires
+			g_wireManager.ResetOCWires();
+			Tick2(); // FF Update
+		}
+	}
+#endif
 private:
 	vector<CIC*> m_ICList;
 	int m_tickCnt;
@@ -263,15 +302,17 @@ private:
 // type: Tick(0), Clock(1)
 #define LOG_TYPE_TICK 0
 #define LOG_TYPE_CLOCK 1
-#define BUS_SIZE 6
+#define BUS_SIZE 16
 #define BUS_IDX_EXCLUDE_FROM_DESCRETE_LINE 0x00010000
 class CSignalLogger
 {
 private:
 	int m_type, m_divider;
 	int m_prescaler;
+	int m_busSize;
 	vector<Wire*> m_signalList; // digital signal
-	vector<int> m_busDecode[16];
+	vector<int> m_busDecode[BUS_SIZE];
+	char m_busName[BUS_SIZE][16];
 	vector<uint8_t> m_log;
 	
 	vector<Wire*> m_analogSignalList; // analog signal ([0]: LSb)
@@ -283,9 +324,21 @@ public:
 		m_type = type;
 		m_divider = divider;
 		m_prescaler = 0;
+		m_busSize = 0;
+		int i;
+		for(i=0; i<BUS_SIZE; i++){
+			sprintf(m_busName[i], "BUS%d", i);
+		}
 	}
 	~CSignalLogger()
 	{
+	}
+	void SetBusName(int idx, const char* name)
+	{
+		strcpy(m_busName[idx], name);
+	}
+	void SetBusSize(int sz){
+		m_busSize = sz;
 	}
 	// busIdx: set 0-3 when you show hex number in log file.
 	// if busIdx used LSb signal has to be appended first.
@@ -360,9 +413,12 @@ public:
 		if(fp == NULL) return -1;
 		
 		// Bus Decode
-		for(i=0; i<BUS_SIZE; i++)
+		vector<int> busLenList(BUS_SIZE);
+		for(i=0; i<m_busSize; i++)
 		{
-			fprintf(fp, "BUS%d,", i);
+			fprintf(fp, "%s,", m_busName[i]);
+			busLenList[i] = strlen(m_busName[i]);
+			//fprintf(fp, "BUS%d,", i);
 		}
 		
 		// Log header
@@ -388,7 +444,7 @@ public:
 		for(lpos=0; lpos<llen; lpos++)
 		{
 			// Bus Decode
-			for(i=0; i<BUS_SIZE; i++)
+			for(i=0; i<m_busSize; i++)
 			{
 				int d = 0;
 				int j;
@@ -398,12 +454,20 @@ public:
 					int bp = m_busDecode[i][j] & 0xFFFF;
 					if(m_log[lpos*ls2 + (bp/8) ] & (1<<(bp%8))) d |= (1<<j);
 				}
+				int pos = 0, a = 0;
+				if(m_busDecode[i].size() >= 9){
+					a = 4;
+				}else if(m_busDecode[i].size() >= 1){
+					a = 2;
+				}
+				
+				while(pos++ < busLenList[i]-a) fputc(' ',fp);
 				if(m_busDecode[i].size() >= 9){
 					fprintf(fp,"%04X,", d);
 				}else if(m_busDecode[i].size() >= 1){
-					fprintf(fp,"  %02X,", d);
+					fprintf(fp,"%02X,", d);
 				}else{
-					fprintf(fp,"    ,");
+					fprintf(fp,",", d);
 				}
 			}
 			

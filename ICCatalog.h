@@ -8,5 +8,6 @@
 #include "FlipFlop.h"
 #include "Decoder.h"
 #include "Memory.h"
+#include "Special.h"
 
 CIC* CreateIC(const char* name, const vector<Wire*>& pinList);
